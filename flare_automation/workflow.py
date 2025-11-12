@@ -15,6 +15,7 @@ from .utils import ensure_directory, write_metadata
 
 @dataclass
 class CaptureResult:
+    run_dir: Path
     illumination: IlluminationConfig
     sequence: ExposureSequence
     exposure_us: int
@@ -117,6 +118,7 @@ class FlareCaptureWorkflow:
                         },
                     )
                     yield CaptureResult(
+                        run_dir=run_dir,
                         illumination=illumination,
                         sequence=sequence,
                         exposure_us=exposure,
