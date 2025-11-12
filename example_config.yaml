@@ -1,0 +1,24 @@
+output_root: ./camera_runs
+scene_name: sample_scene
+serial_baud: 19200
+serial_terminator: "\r"
+preferred_com_port: COM11
+adb_serial: device_serial_here
+illumination:
+  - name: led_ring
+    serial_command: "p 0 020"
+    pwm_percent: 20
+    settle_time_s: 1.0
+  - name: object_ring
+    serial_command: "p 1 050"
+    pwm_percent: 50
+    settle_time_s: 1.0
+exposure_sequences:
+  - label: visible
+    exposure_us: [32000, 64000, 128000, 256000]
+    iso: 1600
+    frame_count: 1
+  - label: ir
+    exposure_us: [500, 1000, 2000, 4000, 8000]
+    iso: 1600
+    frame_count: 1
