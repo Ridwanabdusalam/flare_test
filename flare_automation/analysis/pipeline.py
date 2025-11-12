@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Sequence
 
 from ..config import CaptureConfig, ExposureSequence, IlluminationConfig
-from .roi import InteractiveROISelector
+from .roi import InteractiveROISelector, ROIVerificationRenderer
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class CaptureRecord:
 StageResult = Any
 RoiStage = Callable[[CaptureRecord], StageResult]
 PhotoResponseStage = Callable[[CaptureRecord, StageResult], StageResult]
-VerificationStage = Callable[[CaptureRecord, StageResult, StageResult], None]
+VerificationStage = Callable[[CaptureRecord, StageResult], None]
 
 
 def _load_json(path: Path) -> Any:
@@ -170,9 +170,7 @@ def _noop_photo_response(record: CaptureRecord, roi_result: StageResult) -> Stag
     return {}
 
 
-def _noop_roi_verification(
-    record: CaptureRecord, roi_result: StageResult, photo_response_result: StageResult
-) -> None:
+def _noop_roi_verification(record: CaptureRecord, roi_result: StageResult) -> None:
     logger.info(
         "ROI verification placeholder executed for %s/%s/%sus",
         record.illumination.name,
@@ -181,13 +179,17 @@ def _noop_roi_verification(
     )
 
 
+def _default_roi_verification_stage() -> VerificationStage:
+    return ROIVerificationRenderer()
+
+
 @dataclass
 class AnalysisConfig:
     """Configuration for orchestrating analysis stages."""
 
     roi_definition: RoiStage = field(default_factory=_default_roi_stage)
     photo_response: PhotoResponseStage = field(default=_noop_photo_response)
-    roi_verification: VerificationStage = field(default=_noop_roi_verification)
+    roi_verification: VerificationStage = field(default_factory=_default_roi_verification_stage)
 
 
 def run_analysis(run_root: Path, config: AnalysisConfig) -> None:
@@ -196,6 +198,6 @@ def run_analysis(run_root: Path, config: AnalysisConfig) -> None:
     logger.info("Starting analysis for %s", run_root)
     for record in iter_capture_records(run_root):
         roi_result = config.roi_definition(record)
-        photo_response_result = config.photo_response(record, roi_result)
-        config.roi_verification(record, roi_result, photo_response_result)
+        config.roi_verification(record, roi_result)
+        config.photo_response(record, roi_result)
     logger.info("Analysis complete for %s", run_root)

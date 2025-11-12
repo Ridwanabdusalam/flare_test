@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
@@ -256,6 +257,206 @@ def render_roi_preview(
     fig.savefig(output_path)
     plt.close(fig)
     logger.info("Wrote ROI preview to %s", output_path)
+
+
+def _select_verification_frame(record: "CaptureRecord") -> Path:
+    """Return a RAW16 frame for verification distinct from ROI selection if possible."""
+
+    candidates: list[Path] = []
+    for path in record.converted_files:
+        candidate = Path(path)
+        if candidate.suffix.lower() in {".raw", ".raw16", ".bin"} and candidate.exists():
+            candidates.append(candidate)
+    if not candidates and record.raw16_dir.exists():
+        for path in sorted(record.raw16_dir.iterdir()):
+            if path.is_file() and path.suffix.lower() in {".raw", ".raw16", ".bin"}:
+                candidates.append(path)
+
+    if not candidates:
+        raise FileNotFoundError(
+            f"No RAW16 frames available for verification in {record.capture_dir}"
+        )
+
+    candidates = sorted(dict.fromkeys(candidates))
+    if len(candidates) >= 2:
+        return candidates[1]
+    logger.debug(
+        "Only one RAW16 frame available for verification in %s; reusing it",
+        record.capture_dir,
+    )
+    return candidates[0]
+
+
+def _clip_roi_bounds(image: np.ndarray, roi: ROI) -> tuple[int, int, int, int] | None:
+    x0, y0, width, height = roi.bounds()
+    x1 = x0 + width
+    y1 = y0 + height
+    frame_height, frame_width = image.shape
+
+    if x1 <= 0 or y1 <= 0 or x0 >= frame_width or y0 >= frame_height:
+        logger.warning("ROI %s lies completely outside the frame and will be ignored", roi.name)
+        return None
+
+    clipped_x0 = max(x0, 0)
+    clipped_y0 = max(y0, 0)
+    clipped_x1 = min(x1, frame_width)
+    clipped_y1 = min(y1, frame_height)
+    if clipped_x0 != x0 or clipped_y0 != y0 or clipped_x1 != x1 or clipped_y1 != y1:
+        logger.warning(
+            "ROI %s extends beyond frame bounds; clipping to valid region", roi.name
+        )
+    return clipped_x0, clipped_y0, clipped_x1, clipped_y1
+
+
+def _contrast_scale(image: np.ndarray, *, percentile: float = 1.0) -> tuple[np.ndarray, float, float]:
+    if image.size == 0:
+        raise ValueError("Cannot scale contrast of an empty image")
+    lower = float(np.percentile(image, percentile)) if percentile > 0 else float(image.min())
+    upper = (
+        float(np.percentile(image, 100 - percentile))
+        if percentile > 0
+        else float(image.max())
+    )
+    if upper <= lower:
+        upper = lower + 1.0
+    clipped = np.clip(image.astype(np.float64), lower, upper)
+    scaled = (clipped - lower) / (upper - lower)
+    return (scaled * 255).astype(np.uint8), lower, upper
+
+
+def _apply_existing_scale(image: np.ndarray, *, lower: float, upper: float) -> np.ndarray:
+    clipped = np.clip(image.astype(np.float64), lower, upper)
+    scaled = (clipped - lower) / (upper - lower)
+    return (scaled * 255).astype(np.uint8)
+
+
+def generate_roi_verification_image(
+    record: "CaptureRecord",
+    rois: Sequence[ROI],
+    output_path: Path,
+    *,
+    contrast_percentile: float = 1.0,
+) -> Path:
+    """Create a side-by-side PNG comparing the original frame and ROIs masked out."""
+
+    if not rois:
+        raise ValueError("ROI verification requires at least one ROI")
+
+    frame_path = _select_verification_frame(record)
+    logger.info("Generating ROI verification image from %s", frame_path)
+    frame = load_raw16_image(
+        frame_path,
+        width=record.run.config.raw_width,
+        height=record.run.config.raw_height,
+        stride=record.run.config.raw_stride,
+    )
+
+    masked = frame.copy()
+    for roi in rois:
+        clipped = _clip_roi_bounds(frame, roi)
+        if clipped is None:
+            continue
+        x0, y0, x1, y1 = clipped
+        masked[y0:y1, x0:x1] = 0
+
+    original_display, lower, upper = _contrast_scale(frame, percentile=contrast_percentile)
+    masked_display = _apply_existing_scale(masked, lower=lower, upper=upper)
+
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise RuntimeError("matplotlib is required to render ROI verification images") from exc
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    titles = [
+        "Original (scaled)",
+        "ROIs zeroed (scaled)",
+    ]
+    for axis, image_data, title in zip(axes, (original_display, masked_display), titles):
+        axis.imshow(image_data, cmap="gray", vmin=0, vmax=255)
+        axis.set_title(title)
+        axis.axis("off")
+    fig.suptitle(f"ROI Verification - {frame_path.name}")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    logger.info("Wrote ROI verification comparison to %s", output_path)
+    return output_path
+
+
+class ROIVerificationRenderer:
+    """Pipeline stage that emits ROI zeroing comparisons and a Markdown index."""
+
+    def __init__(
+        self,
+        *,
+        output_dirname: str = "roi_verification",
+        filename_template: str = "{illumination}_{sequence}_{exposure}us.png",
+        contrast_percentile: float = 1.0,
+        report_filename: str | None = "roi_verification.md",
+    ) -> None:
+        self.output_dirname = output_dirname
+        self.filename_template = filename_template
+        self.contrast_percentile = contrast_percentile
+        self.report_filename = report_filename
+        self._report_entries: dict[Path, list[tuple[str, str, int, Path]]] = defaultdict(list)
+
+    def __call__(self, record: "CaptureRecord", roi_result: Sequence[ROI]) -> None:
+        rois = list(roi_result)
+        if not rois:
+            logger.debug("Skipping ROI verification for %s (no ROIs)", record.capture_dir)
+            return
+
+        filename = self.filename_template.format(
+            illumination=_slugify(record.illumination.name),
+            sequence=_slugify(record.sequence.label),
+            exposure=record.exposure_us,
+        )
+        output_dir = record.capture_dir / self.output_dirname
+        output_path = output_dir / filename
+
+        try:
+            generate_roi_verification_image(
+                record,
+                rois,
+                output_path,
+                contrast_percentile=self.contrast_percentile,
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning("Failed to create ROI verification for %s: %s", record.capture_dir, exc)
+            return
+
+        if self.report_filename is None:
+            return
+
+        rel_path: Path
+        try:
+            rel_path = output_path.relative_to(record.run.root)
+        except ValueError:
+            rel_path = output_path
+
+        entry = (record.illumination.name, record.sequence.label, record.exposure_us, rel_path)
+        self._report_entries[record.run.root].append(entry)
+        self._write_report(record.run.root)
+
+    def _write_report(self, run_root: Path) -> None:
+        if self.report_filename is None:
+            return
+        report_path = run_root / self.report_filename
+        entries = sorted(self._report_entries[run_root])
+        lines = ["# ROI Verification Images\n\n"]
+        for illumination, sequence, exposure_us, rel_path in entries:
+            rel_str = rel_path.as_posix()
+            lines.append(
+                f"- **{illumination} / {sequence} / {exposure_us}\u00b5s**: [{rel_str}]({rel_str})\n"
+            )
+        report_path.write_text("".join(lines), encoding="utf-8")
+        logger.info("Updated ROI verification report at %s", report_path)
+
+
+def _slugify(component: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in component)
 
 
 class InteractiveROISelector:
