@@ -1,102 +1,138 @@
 # Flare Capture Automation Toolkit
 
-This repository collects the MATLAB reference scripts and a Python automation workflow used for flare test image acquisition. The Python tooling encapsulates every step of the capture sequence—lighting control, Android device orchestration, RAW conversion, and metadata recording—so that a test operator only supplies a configuration file describing the desired experiment.
+The Flare Capture Automation Toolkit combines the original MATLAB reference
+scripts with a modern Python pipeline that automates flare image acquisition and
+post-processing. The Python workflow coordinates illumination hardware over
+serial, controls an Android capture device via ADB, converts RAW10 frames to
+RAW16, and optionally launches an ROI-driven analysis pass that mirrors the
+legacy MATLAB process. The goal is to provide a reproducible, fully logged
+workflow that can be executed by following a single configuration file.
 
 ## Repository Layout
 
 ```
-flare_capture.py          # CLI entry point that runs the end-to-end workflow
-flare_automation/         # Python package that houses the automation components
-example_config.yaml       # Sample configuration file to customize for each run
-unpack_mipi_raw10.py      # Legacy RAW10 -> RAW16 converter used by the workflow
-step*.m                   # Original MATLAB scripts for manual or reference workflows
+flare_capture.py          # CLI entry point that runs capture + optional analysis
+flare_automation/         # Python package containing the workflow and analysis
+example_config.yaml       # Sample configuration to adapt for your hardware
+unpack_mipi_raw10.py      # Legacy RAW10 -> RAW16 converter invoked by the workflow
+step*.m                   # Original MATLAB scripts kept for reference
 ```
 
-The MATLAB scripts are kept for parity and comparison, but new runs should be driven through `flare_capture.py` so that the entire process is repeatable and logged.
+## Requirements
 
-## Prerequisites
+### Hardware
+- Windows workstation (recommended) or Linux host with access to required
+  serial drivers.
+- USB-connected illumination controller that accepts the serial commands used in
+  your tests.
+- Android capture device with `camcapture` available and authorised for USB
+  debugging.
+- LED fixtures wired to your illumination controller.
 
-1. **Python**: Python 3.10 or newer is recommended.
-2. **Python packages**: Install the runtime dependencies with pip:
+### Software
+- **Python**: 3.10 or newer.
+- **Python packages** (install inside a virtual environment when possible):
+  ```bash
+  pip install pyserial PyYAML numpy matplotlib
+  ```
+  - `pyserial` – mandatory for serial discovery and communication.
+  - `PyYAML` – enables YAML configuration files (JSON works without it).
+  - `numpy` – required by the analysis pipeline for RAW16 processing.
+  - `matplotlib` – required for interactive ROI selection, ROI previews, and
+    diagnostic plots during analysis.
+- **Android Platform Tools**: `adb` must be on your `PATH` and the capture
+  device must be authorised.
+- **RAW converter dependencies**: `unpack_mipi_raw10.py` is executed with
+  `python3`. Install any libraries it expects (see that script's header).
+
+## Initial Setup
+
+1. **Clone the repository** onto the machine that will control the capture run.
+2. **Create and activate a virtual environment** (optional but recommended).
    ```bash
-   pip install pyserial pyyaml
+   python -m venv .venv
+   source .venv/bin/activate        # Linux/macOS
+   .\.venv\Scripts\activate         # Windows PowerShell
+   pip install --upgrade pip
+   pip install pyserial PyYAML numpy matplotlib
    ```
-   * `pyserial` is required for COM port discovery and illumination control.
-   * `PyYAML` is optional but enables YAML configuration files (JSON works out of the box).
-3. **Android platform tools**: `adb` must be available on your system `PATH` with the capture device authorized for debugging.
-4. **RAW converter prerequisites**: `unpack_mipi_raw10.py` is invoked with `python3`. Ensure any libraries it requires are installed (see that script for details).
-5. **Hardware**:
-   * Windows PC or laptop connected to the illumination controller over USB serial.
-   * Android capture device connected over USB.
-   * LED fixtures wired to accept the serial commands defined in your configuration.
+3. **Install Android platform tools** and confirm `adb devices` lists the target
+   handset. If multiple devices appear, note the desired serial number.
+4. **Connect hardware**:
+   - Plug in the illumination controller and note the enumerated COM port.
+   - Connect the Android device via USB and enable USB debugging.
+   - Ensure the LED fixtures respond to commands sent through your controller's
+     serial protocol.
 
-> **Tip:** If multiple Android devices or serial interfaces are connected, either unplug the extras or specify identifiers in the configuration file to avoid ambiguity.
+## Preparing the Android Device
 
-## Quick Start
+Before the first run, verify the Android device accepts the commands the
+workflow issues:
 
-1. **Clone the repository** (or download the relevant files) onto the Windows host that will control the experiment.
-2. **Create a virtual environment** (optional but recommended) and install dependencies.
-3. **Copy `example_config.yaml`** to a new file (e.g., `my_run.yaml`) and edit the values to match your setup.
-4. **Run the workflow**:
-   ```bash
-   python flare_capture.py my_run.yaml
-   ```
-5. Monitor the console output; a summary line is printed for each illumination/exposure combination captured. When the run finishes, the output directory contains raw footage, converted frames, and metadata files you can feed into downstream analysis scripts.
+```bash
+adb root
+adb remount
+adb shell camcapture -h
+```
 
-The sections below explain the configuration options and runtime behavior in more detail.
+You may need elevated privileges on the device to run `camcapture`. Grant any
+permissions that prompt on-device and ensure root access is available, as the
+workflow executes `adb root` and `adb remount` automatically.
 
-## Configuration Reference
+## Configuring a Capture Run
 
-The configuration file describes everything required for a capture run. YAML is encouraged for readability, but JSON files with the same structure are also accepted. Every path is resolved relative to the working directory unless an absolute path is provided.
+Copy `example_config.yaml` to a new file (for example, `my_run.yaml`) and edit
+it to reflect your hardware and desired capture sweep. All paths are resolved
+relative to the configuration file unless absolute paths are supplied.
 
-### Global experiment settings
+### Global Experiment Settings
 
 | Field | Required | Description |
 | ----- | -------- | ----------- |
-| `output_root` | Yes | Directory where run folders will be created. A timestamped subfolder is added per execution. |
-| `scene_name` | Yes | Friendly name that prefixes the run directory (e.g., `lensA_darkroom`). |
-| `camera_id` | No (default `0`) | Camera selector passed to `camcapture` on the Android device. |
-| `resolution` | No (default `4032x3024`) | Sensor mode/resolution string for `camcapture`. |
-| `remote_raw_dir` | No (default `/data/vendor/camera`) | Directory on the Android device where RAW files appear. |
-| `raw_converter` | No (default `unpack_mipi_raw10.py`) | Path to the RAW10→RAW16 conversion script. |
-| `raw_width`, `raw_height`, `raw_stride` | No | Frame geometry supplied to the converter; adjust to your sensor. |
+| `output_root` | Yes | Directory where timestamped run folders will be created. |
+| `scene_name` | Yes | Friendly name that prefixes each run directory (e.g. `lensA_darkroom`). |
+| `camera_id` | No (default `0`) | Camera selector passed to `camcapture`. |
+| `resolution` | No (default `4032x3024`) | Sensor mode string forwarded to `camcapture`. |
+| `remote_raw_dir` | No (default `/data/vendor/camera`) | Device directory where RAW files appear. |
+| `raw_converter` | No (default `unpack_mipi_raw10.py`) | Path to the RAW10→RAW16 converter script. |
+| `raw_width`, `raw_height`, `raw_stride` | No (defaults `4032`, `3024`, `5040`) | Dimensions used when converting RAW16 frames. |
 
-### Serial communication
+### Serial Communication
 
 | Field | Required | Description |
 | ----- | -------- | ----------- |
 | `serial_baud` | No (default `19200`) | Baud rate for the illumination controller. |
-| `serial_terminator` | No (default carriage return) | Character appended to each command (match your firmware expectations). |
-| `preferred_com_port` | Recommended | Explicit COM port (e.g., `COM11`). Use when multiple serial devices exist. |
-| `serial_vendor_id`, `serial_product_id` | Optional | USB VID/PID filters (hex strings like `0403`). Useful for auto-selection when the port number varies. |
+| `serial_terminator` | No (default carriage return) | Character appended to each command. |
+| `preferred_com_port` | Recommended | Explicit COM port name (e.g. `COM11`). Avoids ambiguity when multiple devices are attached. |
+| `serial_vendor_id`, `serial_product_id` | Optional | USB VID/PID filters (hex strings such as `0403`). Used when auto-discovering the serial device. |
 
-### Android device control
+### Android Device Control
 
 | Field | Required | Description |
 | ----- | -------- | ----------- |
-| `adb_serial` | Optional | Android device serial number (from `adb devices -l`). Needed when more than one device is attached. |
-| `adb_timeout_s` | No (default `10.0`) | Timeout (seconds) for ADB operations. |
+| `adb_serial` | Optional | Serial number reported by `adb devices -l`. Required when multiple phones/tablets are attached. |
+| `adb_timeout_s` | No (default `10.0`) | Timeout (seconds) applied to individual ADB commands. |
 
-### Illumination profiles
+### Illumination Profiles
 
-Define each lighting condition under the `illumination` array:
+Declare each lighting condition under the `illumination` array:
 
 ```yaml
 illumination:
   - name: led_ring
     serial_command: "p 0 020"
-    pwm_percent: 20      # Optional metadata only
-    settle_time_s: 1.0   # Allow hardware to stabilize before capture
+    pwm_percent: 20      # Optional metadata stored in capture.json
+    settle_time_s: 1.0   # Delay after setting illumination before capture starts
 ```
 
-* `name` – Used for folder naming in the output directory.
-* `serial_command` – Raw command string sent over serial.
-* `pwm_percent` – Optional field stored in metadata (not interpreted by the workflow).
-* `settle_time_s` – Delay after sending the command before the capture loop begins.
+- `name` – Used for directory naming within the run output.
+- `serial_command` – Raw command string written to the illumination controller.
+- `pwm_percent` – Optional descriptive metadata recorded in `capture.json`.
+- `settle_time_s` – Delay after sending the command before captures begin.
 
-### Exposure sequences
+### Exposure Sequences
 
-Expose each sweep of captures under `exposure_sequences`:
+Define exposure sweeps under `exposure_sequences`:
 
 ```yaml
 exposure_sequences:
@@ -106,39 +142,92 @@ exposure_sequences:
     frame_count: 1
 ```
 
-* `label` – Included in directory names and metadata.
-* `exposure_us` – List of shutter durations in microseconds. At least one value is required.
-* `iso` – Gain applied for the entire sequence.
-* `frame_count` – Number of frames to capture per exposure (looped on-device).
+- `label` – Included in directory names and metadata.
+- `exposure_us` – List of shutter durations (µs). At least one value is required.
+- `iso` – Gain applied to every exposure in the sequence.
+- `frame_count` – Number of frames captured per exposure value.
 
-Every illumination profile is paired with every exposure sequence, resulting in a Cartesian product of capture runs.
+Every illumination profile is paired with every exposure sequence. Ensure at
+least one entry exists in each list or the configuration loader will raise an
+error.
 
-## What the Workflow Does
+## Running the Workflow
 
-For each illumination/sequence combination the workflow:
+Execute the end-to-end capture (and optional analysis) from the repository root:
 
-1. Selects or discovers the specified COM port and opens a serial connection.
-2. Creates a timestamped run directory under `output_root` and writes `config.json` to record the exact settings used.
-3. Issues ADB commands to stop the legacy capture service, remount storage (for permissions), and clear stale RAW frames from the device.
-4. Sends the configured illumination command and waits for the specified settle delay.
-5. Iterates through each exposure value:
-   * Clears any leftover RAW files on the device.
-   * Invokes `camcapture` via ADB to acquire the requested frame count.
-   * Pulls the generated `.raw` files into `<run>/<illumination>/<label>_<exposure>us/raw10/`.
-   * Runs `unpack_mipi_raw10.py` to convert each RAW10 file into RAW16 under `raw16/`.
-   * Writes `capture.json` describing the illumination, exposure, and list of files produced.
-6. Yields progress information back to the CLI, which prints a summary line for visibility.
+```bash
+python flare_capture.py my_run.yaml
+```
 
-All metadata is stored as JSON so downstream processing can reconstruct the capture context without inspecting folder names.
+The workflow:
+1. Discovers or opens the configured serial port.
+2. Creates a timestamped directory under `output_root` and writes `config.json`
+   with the resolved configuration.
+3. Issues ADB commands to stop `captureengineservice`, remount storage, and
+   clear stale files in `remote_raw_dir`.
+4. Iterates through the illumination/exposure Cartesian product:
+   - Sends the illumination command and waits for `settle_time_s`.
+   - Captures frames via `camcapture` for each exposure value.
+   - Pulls RAW10 files into `<run>/<illumination>/<label>_<exposure>us/raw10/`.
+   - Converts each RAW10 file to RAW16 under `raw16/` using the configured
+     converter and geometry.
+   - Writes `capture.json` summarising metadata and file lists.
+5. Prints a progress line such as `Captured 3 files for led_ring @ 64000 us` for
+   each capture group.
+6. Unless `--skip-analysis` is supplied, launches the analysis pipeline against
+   the most recent run (or the directory specified via `--analysis-run-root`).
+
+### Command-line Flags
+
+| Flag | Description |
+| ---- | ----------- |
+| `--skip-analysis` | Capture only; do not launch the analysis pipeline. |
+| `--analysis-run-root PATH` | Analyse an existing run directory instead of the most recent capture. Useful when re-running ROI selection. |
+| `--log-level LEVEL` | Adjust logging verbosity (`CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG`). |
+
+Run `python flare_capture.py --help` for the full argument list.
+
+## Analysis Workflow
+
+After capture the pipeline defaults to running analysis on the resulting run
+folder. The analysis stages live under `flare_automation.analysis` and currently
+perform:
+
+1. **Interactive ROI selection** – Matplotlib opens a window showing a RAW16
+   frame. Left-click to add ROIs, right-click (or middle-click) to remove the
+   last ROI, then close the window when satisfied. The chosen ROIs are persisted
+   to `<run>/rois.json`.
+2. **ROI verification rendering** – For each capture group a PNG is written to
+   `<run>/roi_verification/` showing the original frame next to a version with
+   the ROIs zeroed out.
+3. **Photo-response analysis** – ROI means are exported to
+   `photo_response_measurements.csv`, linear fits are summarised in
+   `photo_response_summary.json`, and log–log diagnostic plots are written for
+   each ROI.
+
+To rerun analysis later (for example after editing `rois.json`), execute the
+analysis entry point directly from Python:
+
+```bash
+python -c "from flare_automation import AnalysisConfig, run_analysis; from pathlib import Path; run_analysis(Path('<path-to-run>'), AnalysisConfig())"
+```
+
+When you invoke `flare_capture.py` normally, you can include
+`--analysis-run-root <path-to-run>` to analyse a specific run after the new
+capture completes. Supply `--skip-analysis` if you want to capture only and
+defer analysis entirely.
 
 ## Output Structure
 
-The folder hierarchy created per run looks like:
+Each run generates the following hierarchy:
 
 ```
 <output_root>/
   sceneName_YYYYMMDD_HHMMSS/
     config.json
+    rois.json                  # Created after analysis ROI selection
+    roi_verification/
+      led_ring_visible_64000us.png
     led_ring/
       sequence.json
       visible_64000us/
@@ -147,39 +236,36 @@ The folder hierarchy created per run looks like:
           frame_000.raw
         raw16/
           frame_000_16.raw
-    object_ring/
       ...
 ```
 
-This layout ensures raw captures and converted frames remain paired by illumination and exposure. The metadata files can be ingested by analysis notebooks or ported MATLAB scripts.
+Metadata files (`config.json`, `sequence.json`, `capture.json`) capture all
+inputs so downstream tools can reproduce the experiment context without parsing
+folder names.
 
-## Troubleshooting & Tips
+## Troubleshooting
 
-* **Serial discovery fails**: Provide `preferred_com_port` explicitly or confirm that `pyserial` is installed and the device drivers expose the interface as a COM port.
-* **Multiple serial devices found**: Either disconnect the extras or set `preferred_com_port` so the workflow knows which one to use.
-* **ADB timeouts**: Increase `adb_timeout_s` for slower devices or check the USB connection.
-* **RAW conversion errors**: Validate that `raw_width`, `raw_height`, and `raw_stride` match the sensor output. You can test the converter independently:
+- **Serial discovery fails** – Confirm `pyserial` is installed and supply
+  `preferred_com_port` or VID/PID filters if multiple controllers are attached.
+- **Multiple serial devices detected** – Disconnect unused devices or set
+  `preferred_com_port` explicitly.
+- **ADB timeouts** – Increase `adb_timeout_s`, verify the USB cable, and ensure
+  the device authorises the host after `adb root`.
+- **RAW conversion errors** – Verify `raw_width`, `raw_height`, and `raw_stride`
+  match the sensor output. Test the converter manually:
   ```bash
   python unpack_mipi_raw10.py -i sample.raw -o sample_16.raw -x 4032 -y 3024 -s 5040
   ```
-* **Dry runs**: If you want to validate serial and ADB connectivity without collecting frames, temporarily set `frame_count: 0` or comment out sequences while testing wiring.
-
-## Extending the Workflow
-
-The Python package is organized so you can swap or enhance individual pieces:
-
-* `flare_automation.config` – Dataclasses and loaders for strongly-typed configuration.
-* `flare_automation.serial_controller` – Serial discovery/control; adapt if your hardware requires different framing or acknowledgements.
-* `flare_automation.adb_controller` – Thin wrapper around ADB operations; extend with custom shell commands if you need additional device setup.
-* `flare_automation.raw_conversion` – Currently shells out to the legacy converter; replace with a native implementation if desired.
-* `flare_automation.workflow` – High-level orchestration. Hooks can be added to log to a database, notify observers, or integrate with ROI selection tools.
-
-Because every capture step is driven by configuration and metadata is written to disk, the workflow is reproducible and easier to audit than the ad hoc MATLAB pipeline.
+- **Matplotlib windows do not appear** – Ensure a desktop environment is
+  available (remote sessions may require X forwarding) and that `matplotlib` is
+  installed with a GUI backend.
+- **Skipping analysis** – Use `--skip-analysis` during capture to avoid GUI
+  prompts. You can run analysis later from a workstation with display support.
 
 ## Relationship to Legacy MATLAB Scripts
 
-The MATLAB scripts (`step1_adjust_brightness.m` through `step7_check_rois.m`) document the original manual procedure for flare testing. Use them as a reference for validation or when porting analysis code to Python, but prefer the automated Python workflow for production captures.
+The MATLAB scripts (`step1_adjust_brightness.m` … `step7_check_rois.m`) describe
+the original manual workflow. They remain for reference and validation, but new
+experiments should use the automated Python tooling for repeatability, logging,
+and integration with downstream analysis.
 
-## Next Steps
-
-Once images are captured, you can process the RAW16 files with your analysis pipeline (for example, porting the MATLAB flare calculations to Python/NumPy). The JSON metadata produced by the workflow provides the exposure ladder, illumination settings, and file lists needed to batch the analysis stage.
