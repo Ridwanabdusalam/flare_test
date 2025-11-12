@@ -7,6 +7,12 @@ from .pipeline import (
     iter_capture_records,
     run_analysis,
 )
+from .photo_response import (
+    PhotoResponseMeasurement,
+    PhotoResponseResult,
+    RoiFitResult,
+    analyze_photo_response,
+)
 from .roi import (
     ROI,
     InteractiveROISelector,
@@ -24,6 +30,10 @@ __all__ = [
     "RunDataError",
     "ROI",
     "InteractiveROISelector",
+    "PhotoResponseMeasurement",
+    "PhotoResponseResult",
+    "RoiFitResult",
+    "analyze_photo_response",
     "load_raw16_image",
     "load_roi_set",
     "iter_capture_records",
