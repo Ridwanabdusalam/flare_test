@@ -1,0 +1,99 @@
+[HAL    ]   +------------------------------------------------------------------+
+[HAL    ]   +                   System Event Trigger Info                       
+[HAL    ]   +------------------------------------------------------------------+
+[HAL    ]     System Header Data:
+[HAL    ]       errorCode                      : 259
+[HAL    ]       error String                   : CamxResultExtCoreFlushResultTimedOut
+[HAL    ]       error Description              : Description: CamxResultExt Core Flush Result TimedOut
+[HAL    ]       isDumpOnly                     : true
+[HAL    ]       forceSigAbort                  : false
+[HAL    ]     Node Data:
+[HAL    ]       nodeInstanceId                 : NIL
+[HAL    ]       nodeType                       : NIL
+[HAL    ]       nodeName                       : NIL
+[HAL    ]       NodeInstance                   : NIL
+[HAL    ]     Pipeline Data:
+[HAL    ]       pipelineId                     : NIL
+[HAL    ]       PipelineName                   : NIL
+[HAL    ]       PipelineInstance               : NIL
+[HAL    ]     Session Data:
+[HAL    ]       SessionInstance                : 0xb4000072e432cbc0
+[HAL    ]       SessionPipelines               : HammerheadRawCaptureRealTime
+[HAL    ]     Feature Data:
+[HAL    ]       FeatureId                      : NIL
+[HAL    ]       FeatureInstanceId              : NIL
+[HAL    ]       FeatureInstance                : NIL
+[HAL    ]       FeatureName                    : NIL
+[HAL    ]     Graph Data:
+[HAL    ]       GraphId                        : NIL
+[HAL    ]       GraphInstance                  : NIL
+[HAL    ]       GraphName                      : NIL
+[HAL    ]     Usecase Data:
+[HAL    ]       UsecaseInstance                : 0xb4000072e5152d40
+[HAL    ]       UsecaseName                    : UsecaseHammerheadRawCapture
+[HAL    ]       UsecaseID                      : 17
+  +------------------------------------------------------------------+
+  +                   HAL Device Config Info                         +
+  +------------------------------------------------------------------+
+    usecaseNumBatchedFrames : 1
+    fpsValue                : 0
+    FlushEnabled            : true
+    cameraId                : 0
+    tracingZoom             : false
+    zoomLevel               : [left: 0, top: 0, width:0, height: 0]
+    NumStreams              : 1
+    Stream[index: 0] config info :-
+      physical CameraId : 
+      format            : 37
+      width             : 4032
+      height            : 3024
+      stream_type       : 00000000
+      usage             : 00020003
+      max_buffers       : 8
+      rotation          : 00000000
+      data_space        : 00000000
+      priv              : 0xb4000072e389b680
+      reserved[0]       : 0x0
+      reserved[1]       : 0x1e
+[HAL    ]   +------------------------------------------------------------------+
+[HAL    ]   +                          HAL Dump                                +
+[HAL    ]   +------------------------------------------------------------------+
+[HAL    ]     Frame Number ## REQUEST_ERROR ## RESULT_ERROR ## BUFFER_ERROR ## Shutter ##  Metadata[Rcvd/Tot] ## Output[Rcvd/Tot(inErr)] ## Input ## S0[Rcvd/StatusOK/BufErrNotify](0xb4000072e5023008)[0] ## 
+[HAL    ]             4			 false			 false			 false		  false			 0/2						0/1(0)			   0/0    FinalMetadataSent:0          0/0/0                                  ##
+[CORE   ] 
+[CORE   ] ----------------------------------------------------------------------
+[CORE   ] + STATIC METADATA
+[CORE   ]     Dump Static metadata in file: /data/vendor/camera/coredump/DumpOnly_20250626_140716/StaticMetadata_cameraID_0.txt
+[CORE   ] ----------------------------------------------------------------------
+[CORE   ] 
+[CORE   ] +------------------------------------------------------------------+
+[CORE   ] +          ChiContext DRQ                                          +
+[CORE   ] +------------------------------------------------------------------+
+[CORE   ]   DRQ:0xb4000072e386db00 is associated with Session:0x0
+[CORE   ]   Num deferred nodes     = 0
+[CORE   ]   Num Chi deferred nodes = 0
+[CORE   ]   -----------------------
+[CORE   ]   Internal dependencies: 
+[CORE   ]   -----------------------
+[CORE   ]   Chi dependencies: 
+
++---------------------------------------------------------------------------------------+
+  + CSL DUMP EVENT
++---------------------------------------------------------------------------------------+
+  + CSL Session Dump:
+  +---------------------------------------------------------------------------------------+
+    State: 1, Index: 0, streamOn: 0, refCount: 0, clientRefCount: 3, hSession: 2c0200, CSLSessionName: HammerheadRawCaptureRealTime, hMasterLink: 13370116, acquiredPID: 5885, acquiredTID: 5885, InFlush: 1, linkCount: 1
+  +---------------------------------------------------------------------------------------+
+  + CSL Acquired Devices
+  +---------------------------------------------------------------------------------------+
+    Session Handle: 0x2c0200, Num Acquired Devices: 3
+        deviceName: CSLHwImageSensor, Nodename: HammerheadRawCaptureRealTime_Sensor0_cam0, Index: 8, CSL Device Handle Acquired: 8257793, State: CSLHwValidState, RefCount: 0, fd: -1, mode: 0, operationMode: 0.
+        deviceName: CSLHwIFE, Nodename: HammerheadRawCaptureRealTime_IFE0_cam0, Index: 0, CSL Device Handle Acquired: 9830658, State: CSLHwValidState, RefCount: 0, fd: -1, mode: 0, operationMode: 0.
+        deviceName: CSLHwCSIPHY, Nodename: HammerheadRawCaptureRealTime_Sensor0_cam0, Index: 3, CSL Device Handle Acquired: 12779779, State: CSLHwValidState, RefCount: 0, fd: -1, mode: 0, operationMode: 0.
+  +---------------------------------------------------------------------------------------+
+  + Valid Fence Table Info
+  +---------------------------------------------------------------------------------------+
+  +---------------------------------------------------------------------------------------+
+[HAL    ]   +------------------------------------------------------------------+
+[HAL    ]   +                  Dump took 10 ms                                 +
+[HAL    ]   +------------------------------------------------------------------+
