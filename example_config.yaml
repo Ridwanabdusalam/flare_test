@@ -1,0 +1,55 @@
+# Sample configuration for a combined capture + analysis run.
+output_root: camera_runs
+scene_name: demo_scene
+preferred_com_port: COM11
+adb_serial: FAKE1234567
+illumination:
+  - name: camera_led
+    serial_command: "p 0 020"
+    pwm_percent: 20
+    settle_time_s: 1.0
+  - name: object_led
+    serial_command: "p 1 050"
+    pwm_percent: 50
+    settle_time_s: 1.0
+exposure_sequences:
+  - label: visible
+    exposure_us: [32000, 64000, 128000]
+    iso: 1600
+    frame_count: 1
+analysis:
+  enabled: true
+  sequence_label: visible
+  nd_filter_ratio: 0.1071
+  saturation_dn: 600
+  scenes:
+    - illumination: camera_led
+      illumination_lux: 587
+    - illumination: object_led
+      illumination_lux: 855
+  rois:
+    - name: reflectance_high
+      row: 1200
+      col: 1800
+      half_width: 8
+      role: reflectance
+      reflectance: 0.915
+    - name: reflectance_mid
+      row: 1500
+      col: 2000
+      half_width: 8
+      role: reflectance
+      reflectance: 0.363
+    - name: black_hole
+      row: 1600
+      col: 2100
+      half_width: 8
+      role: black_hole
+    - name: direct_beam
+      row: 1700
+      col: 2200
+      half_width: 8
+      role: direct_beam
+  preview:
+    illumination: camera_led
+    exposure_us: 64000
