@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Sequence
 
 from ..config import CaptureConfig, ExposureSequence, IlluminationConfig
+from .roi import InteractiveROISelector
 
 logger = logging.getLogger(__name__)
 
@@ -155,14 +156,8 @@ def iter_capture_records(run_root: Path) -> Iterator[CaptureRecord]:
             yield record
 
 
-def _noop_roi_definition(record: CaptureRecord) -> StageResult:
-    logger.info(
-        "ROI definition placeholder executed for %s/%s/%sus",
-        record.illumination.name,
-        record.sequence.label,
-        record.exposure_us,
-    )
-    return {}
+def _default_roi_stage() -> RoiStage:
+    return InteractiveROISelector()
 
 
 def _noop_photo_response(record: CaptureRecord, roi_result: StageResult) -> StageResult:
@@ -190,7 +185,7 @@ def _noop_roi_verification(
 class AnalysisConfig:
     """Configuration for orchestrating analysis stages."""
 
-    roi_definition: RoiStage = field(default=_noop_roi_definition)
+    roi_definition: RoiStage = field(default_factory=_default_roi_stage)
     photo_response: PhotoResponseStage = field(default=_noop_photo_response)
     roi_verification: VerificationStage = field(default=_noop_roi_verification)
 
