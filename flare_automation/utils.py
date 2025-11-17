@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
@@ -49,6 +50,8 @@ def ensure_directory(path: Path) -> None:
 def dataclass_to_dict(obj: Any) -> Any:
     if is_dataclass(obj):
         return {key: dataclass_to_dict(value) for key, value in asdict(obj).items()}
+    if isinstance(obj, (Path, os.PathLike)):
+        return os.fspath(obj)
     if isinstance(obj, Mapping):
         return {key: dataclass_to_dict(value) for key, value in obj.items()}
     if isinstance(obj, Iterable) and not isinstance(obj, (str, bytes)):
