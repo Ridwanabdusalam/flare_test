@@ -3,7 +3,7 @@ scene_name: sample_scene
 serial_baud: 19200
 serial_terminator: "\r"
 preferred_com_port: COM4
-adb_serial: device_serial_here
+# adb_serial: ABCDEF123456  # Optional: auto-detects when omitted
 illumination:
   - name: led_ring
     serial_command: "p 0 020"
