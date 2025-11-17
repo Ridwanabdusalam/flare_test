@@ -18,7 +18,7 @@ def convert_raw10_to_raw16(
     ensure_directory(output_dir)
     output_path = output_dir / f"{input_path.stem}_16.raw"
     cmd = [
-        "python3",
+        "python",
         str(converter),
         "-i",
         str(input_path),

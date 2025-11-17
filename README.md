@@ -43,7 +43,8 @@ step*.m                   # Original MATLAB scripts kept for reference
 - **Android Platform Tools**: `adb` must be on your `PATH` and the capture
   device must be authorised.
 - **RAW converter dependencies**: `unpack_mipi_raw10.py` is executed with
-  `python3`. Install any libraries it expects (see that script's header).
+  `python` (or `python3` if that is how your interpreter is exposed). Install
+  any libraries it expects (see that script's header).
 
 ## Initial Setup
 
@@ -256,6 +257,10 @@ folder names.
   ```bash
   python unpack_mipi_raw10.py -i sample.raw -o sample_16.raw -x 4032 -y 3024 -s 5040
   ```
+- **RAW16 too small during analysis** – The loader now falls back to
+  stride-free frames if at least `raw_width * raw_height` pixels are present,
+  but you should still confirm the configured stride matches your sensor to
+  avoid cropping.
 - **Matplotlib windows do not appear** – Ensure a desktop environment is
   available (remote sessions may require X forwarding) and that `matplotlib` is
   installed with a GUI backend.
