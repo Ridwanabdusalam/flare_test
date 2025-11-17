@@ -25,6 +25,11 @@ class AdbController:
             cmd.extend(["-s", self._serial])
         return cmd
 
+    def set_serial(self, serial: str | None) -> None:
+        """Update the target device serial used for subsequent commands."""
+
+        self._serial = serial
+
     def run(self, *args: str) -> str:
         cmd = self._base_cmd() + list(args)
         return run_command(cmd, timeout=self._timeout_s)

@@ -43,7 +43,8 @@ step*.m                   # Original MATLAB scripts kept for reference
 - **Android Platform Tools**: `adb` must be on your `PATH` and the capture
   device must be authorised.
 - **RAW converter dependencies**: `unpack_mipi_raw10.py` is executed with
-  `python3`. Install any libraries it expects (see that script's header).
+  `python` (or `python3` if that is how your interpreter is exposed). Install
+  any libraries it expects (see that script's header).
 
 ## Initial Setup
 
