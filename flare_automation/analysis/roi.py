@@ -109,10 +109,26 @@ def load_raw16_image(path: Path, *, width: int, height: int, stride: int | None 
     stride = stride or width
     expected_pixels = stride * height
     data = np.fromfile(path, dtype=np.uint16)
+
     if data.size < expected_pixels:
-        raise ValueError(
-            f"RAW16 file {path} is too small for expected dimensions {width}x{height}"
-        )
+        # Some capture setups produce tightly packed RAW16 frames without stride
+        # padding. If the file is still large enough for width * height pixels,
+        # treat it as a tightly packed frame and continue instead of failing.
+        packed_pixels = width * height
+        if data.size >= packed_pixels:
+            logger.warning(
+                "RAW16 file %s has %d pixels (< expected %d); assuming no stride padding",
+                path,
+                data.size,
+                expected_pixels,
+            )
+            stride = width
+            expected_pixels = packed_pixels
+        else:
+            raise ValueError(
+                f"RAW16 file {path} is too small for expected dimensions {width}x{height}"
+            )
+
     image = data[:expected_pixels].reshape(height, stride)
     if stride != width:
         image = image[:, :width]
