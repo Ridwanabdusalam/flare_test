@@ -31,6 +31,24 @@ class FlareCaptureWorkflow:
         )
         self.adb_controller = AdbController(serial=config.adb_serial, timeout_s=config.adb_timeout_s)
 
+    def _configure_adb_serial(self) -> None:
+        """Select an ADB device when the config does not specify one."""
+
+        placeholder_values = {"device_serial_here"}
+        if self.config.adb_serial and self.config.adb_serial not in placeholder_values:
+            self.adb_controller.set_serial(self.config.adb_serial)
+            return
+
+        devices = list(AdbController.list_devices())
+        if not devices:
+            raise RuntimeError("No ADB devices detected. Connect a device or set 'adb_serial'.")
+        if len(devices) > 1:
+            raise RuntimeError("Multiple ADB devices detected. Specify 'adb_serial' to disambiguate.")
+
+        selected = devices[0].serial
+        self.adb_controller.set_serial(selected)
+        self.config.adb_serial = selected
+
     def _select_serial_port(self) -> str:
         if self.config.preferred_com_port:
             return self.config.preferred_com_port
@@ -66,6 +84,7 @@ class FlareCaptureWorkflow:
 
     def run(self) -> Iterator[CaptureResult]:  # pragma: no cover - orchestrates hardware
         serial_port = self._select_serial_port()
+        self._configure_adb_serial()
         with self.serial_controller.open(serial_port) as connection:
             run_dir = self._prepare_output()
             self._prepare_device()
