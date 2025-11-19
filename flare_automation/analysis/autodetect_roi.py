@@ -54,19 +54,40 @@ def autodetect_black_hole_roi(
 
     # 3. Apply Otsu's threshold to find the chart (assumes bimodal distribution)
     thresh = threshold_otsu(norm_image)
-    # Find the dark region, which is the chart
-    binary = (norm_image < thresh).astype(np.uint8) * 255
+
+    # First, find the bright illuminated area
+    binary_bright = (norm_image > thresh).astype(np.uint8) * 255
+    contours_bright, _ = cv2.findContours(binary_bright, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if not contours_bright:
+        raise ChartNotFoundError("No bright contours found in the image.")
+
+    largest_bright_contour = max(contours_bright, key=cv2.contourArea)
+    ill_x, ill_y, ill_w, ill_h = cv2.boundingRect(largest_bright_contour)
+
+    # Now, find the dark chart area within the illuminated area
+    illuminated_region_norm = norm_image[ill_y : ill_y + ill_h, ill_x : ill_x + ill_w]
+
+    # We need a new threshold for this sub-region
+    thresh_chart = threshold_otsu(illuminated_region_norm)
+    binary_dark = (illuminated_region_norm < thresh_chart).astype(np.uint8) * 255
+
 
     # 4. Find contours of the dark regions
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(binary_dark, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     if not contours:
         raise ChartNotFoundError("No contours found in the image.")
 
     # 5. Find the largest contour by area, which should be the chart
     largest_contour = max(contours, key=cv2.contourArea)
-    chart_x, chart_y, chart_w, chart_h = cv2.boundingRect(largest_contour)
+    chart_x_rel, chart_y_rel, chart_w, chart_h = cv2.boundingRect(largest_contour)
+
+    # Convert relative coordinates to absolute
+    chart_x = ill_x + chart_x_rel
+    chart_y = ill_y + chart_y_rel
     chart_bbox = (chart_x, chart_y, chart_w, chart_h)
+
 
     # 6. Find the darkest point within the chart's bounding box in the *original* image
     chart_region = image[chart_y : chart_y + chart_h, chart_x : chart_x + chart_w]
@@ -138,7 +159,7 @@ def generate_autodetect_verification_image(
         chart_w,
         chart_h,
         linewidth=1.5,
-        edgecolor="tab:blue",
+        edgecolor="red",
         facecolor="none",
         label="Detected Chart Area",
     )
@@ -151,7 +172,7 @@ def generate_autodetect_verification_image(
         roi_w,
         roi_h,
         linewidth=1.5,
-        edgecolor="tab:red",
+        edgecolor="orange",
         facecolor="none",
     )
     ax.add_patch(roi_rect)
@@ -159,7 +180,7 @@ def generate_autodetect_verification_image(
         roi.center[0],
         roi.center[1],
         "+",
-        color="tab:red",
+        color="orange",
         fontsize="large",
         ha="center",
         va="center",
