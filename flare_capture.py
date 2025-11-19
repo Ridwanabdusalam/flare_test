@@ -32,6 +32,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Do not execute the analysis pipeline after capture completes",
     )
     parser.add_argument(
+        "--auto-roi",
+        action="store_true",
+        help="Use automated ROI detection instead of the interactive selector",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"],
@@ -70,7 +75,8 @@ def main(argv: list[str] | None = None) -> int:
 
     run_root = run_root.resolve()
     print(f"Running analysis for {run_root}")
-    run_analysis(run_root, AnalysisConfig())
+    analysis_config = AnalysisConfig(auto_roi=args.auto_roi)
+    run_analysis(run_root, analysis_config)
     return 0
 
 
