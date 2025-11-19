@@ -192,7 +192,7 @@ def _default_roi_verification_stage() -> VerificationStage:
 class AnalysisConfig:
     """Configuration for orchestrating analysis stages."""
 
-    auto_roi: bool = False
+    auto_roi: bool = True
     roi_definition: RoiStage | None = None
     photo_response: PhotoResponseStage = field(default=_noop_photo_response)
     roi_verification: VerificationStage = field(default_factory=_default_roi_verification_stage)
