@@ -189,6 +189,35 @@ The workflow:
 
 Run `python flare_capture.py --help` for the full argument list.
 
+### Previewing ROI detection on an existing RAW16 frame
+
+If you already have a RAW16 frame and want to validate the darkest-point/ROI
+autodetection without running a full capture, use the helper script
+`preview_autodetect_roi.py`:
+
+```bash
+python preview_autodetect_roi.py \
+  --image /path/to/frame_000_16.raw \
+  --width 4032 --height 3024 --stride 5040 \
+  --output autodetect_roi_preview.png
+```
+
+- `--width`/`--height`/`--stride` should match the geometry of the frame. Omit
+  `--stride` when the frame is tightly packed (stride equals width).
+- `--roi-size W H` overrides the ROI dimensions (default: `16 16`).
+- `--contrast-percentile` adjusts display scaling for the PNG (default: `1.0`).
+- Add `--verbose` to print detailed detection logs.
+
+The script reuses the exact automated ROI detector from the analysis pipeline:
+
+1. It thresholds the frame to find the bright illuminated (white) area.
+2. Within that region it finds the dark chart (black) area.
+3. It then locates the darkest pixel inside the chart and centres the ROI
+   there.
+
+The resulting PNG overlay matches the automated analysis preview, highlighting
+the detected chart bounding box and ROI around the darkest point.
+
 ## Analysis Workflow
 
 After capture the pipeline defaults to running analysis on the resulting run
