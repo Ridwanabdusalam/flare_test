@@ -2,16 +2,50 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import logging
+import subprocess
 import sys
 from pathlib import Path
 
-from flare_automation import (
-    AnalysisConfig,
-    CaptureConfig,
-    FlareCaptureWorkflow,
-    run_analysis,
-)
+
+# Map importable module names to the package names pip expects. Keeping this list
+# here ensures we can check for runtime requirements before importing the rest of
+# the project, which avoids cryptic import errors when dependencies are missing.
+REQUIRED_DEPENDENCIES = {
+    "serial": "pyserial",
+    "yaml": "PyYAML",
+    "numpy": "numpy",
+    "matplotlib": "matplotlib",
+    "cv2": "opencv-python",
+    "skimage": "scikit-image",
+}
+
+
+def _check_and_install_dependencies() -> None:
+    missing = {
+        module: package
+        for module, package in REQUIRED_DEPENDENCIES.items()
+        if importlib.util.find_spec(module) is None
+    }
+    if not missing:
+        return
+
+    package_list = ", ".join(sorted(missing.values()))
+    print(f"Missing required packages: {package_list}")
+    install_by_default = not sys.stdin.isatty()
+    if install_by_default:
+        response = "y"
+    else:
+        response = input("Install them now? [Y/n]: ").strip().lower()
+    if response in {"", "y", "yes"}:
+        cmd = [sys.executable, "-m", "pip", "install", *sorted(missing.values())]
+        print("Installing dependencies...", " ".join(cmd))
+        completed = subprocess.run(cmd, check=False)
+        if completed.returncode != 0:
+            raise RuntimeError("Failed to install required packages")
+    else:
+        raise RuntimeError("Cannot continue without installing required packages")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -47,6 +81,14 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
+    _check_and_install_dependencies()
+
+    from flare_automation import (
+        AnalysisConfig,
+        CaptureConfig,
+        FlareCaptureWorkflow,
+        run_analysis,
+    )
     logging.basicConfig(level=getattr(logging, args.log_level))
     config = CaptureConfig.load(args.config)
     if not config.output_root.is_absolute():
