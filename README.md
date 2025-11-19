@@ -184,6 +184,7 @@ The workflow:
 | ---- | ----------- |
 | `--skip-analysis` | Capture only; do not launch the analysis pipeline. |
 | `--analysis-run-root PATH` | Analyse an existing run directory instead of the most recent capture. Useful when re-running ROI selection. |
+| `--interactive-roi` | Force interactive ROI selection instead of the default automated detector. |
 | `--log-level LEVEL` | Adjust logging verbosity (`CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG`). |
 
 Run `python flare_capture.py --help` for the full argument list.
@@ -191,13 +192,15 @@ Run `python flare_capture.py --help` for the full argument list.
 ## Analysis Workflow
 
 After capture the pipeline defaults to running analysis on the resulting run
-folder. The analysis stages live under `flare_automation.analysis` and currently
-perform:
+folder using automated ROI detection. The analysis stages live under
+`flare_automation.analysis` and currently perform:
 
-1. **Interactive ROI selection** – Matplotlib opens a window showing a RAW16
-   frame. Left-click to add ROIs, right-click (or middle-click) to remove the
-   last ROI, then close the window when satisfied. The chosen ROIs are persisted
-   to `<run>/rois.json`.
+1. **Automated ROI selection** – A representative RAW16 frame is scanned to find
+   the dark chart region and place a ROI automatically. The ROI is saved to
+   `<run>/rois.json` and a preview PNG is generated for verification. If you
+   prefer to click ROIs manually, pass `--interactive-roi` to
+   `flare_capture.py` (or construct `AnalysisConfig(auto_roi=False)`) to open
+   the interactive Matplotlib selector instead.
 2. **ROI verification rendering** – For each capture group a PNG is written to
    `<run>/roi_verification/` showing the original frame next to a version with
    the ROIs zeroed out.
