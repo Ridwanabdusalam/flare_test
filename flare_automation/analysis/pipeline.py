@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Sequence
 
 from ..config import CaptureConfig, ExposureSequence, IlluminationConfig
-from .roi import InteractiveROISelector, ROIVerificationRenderer
+from .roi import ROI, InteractiveROISelector, ROIVerificationRenderer, load_roi_set, save_roi_set
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,12 @@ def iter_capture_records(run_root: Path) -> Iterator[CaptureRecord]:
             yield record
 
 
-def _default_roi_stage() -> RoiStage:
+from .autodetect_roi import autodetect_black_hole_roi, generate_autodetect_verification_image
+
+
+def _default_roi_stage(auto_roi: bool) -> RoiStage:
+    if auto_roi:
+        return AutomatedROISelector()
     return InteractiveROISelector()
 
 
@@ -187,9 +192,79 @@ def _default_roi_verification_stage() -> VerificationStage:
 class AnalysisConfig:
     """Configuration for orchestrating analysis stages."""
 
-    roi_definition: RoiStage = field(default_factory=_default_roi_stage)
+    auto_roi: bool = False
+    roi_definition: RoiStage | None = None
     photo_response: PhotoResponseStage = field(default=_noop_photo_response)
     roi_verification: VerificationStage = field(default_factory=_default_roi_verification_stage)
+
+    def __post_init__(self) -> None:
+        if self.roi_definition is None:
+            self.roi_definition = _default_roi_stage(self.auto_roi)
+
+
+class AutomatedROISelector:
+    """Callable analysis stage that uses the automated ROI detection."""
+
+    def __init__(
+        self,
+        *,
+        roi_size: tuple[int, int] = (16, 16),
+        roi_filename: str = "rois.json",
+        preview_filename: str = "autodetect_roi_preview.png",
+    ) -> None:
+        self.roi_size = roi_size
+        self.roi_filename = roi_filename
+        self.preview_filename = preview_filename
+        self._cache: dict[Path, list[ROI]] = {}
+
+    def __call__(self, record: "CaptureRecord") -> list[ROI]:
+        run_root = record.run.root
+        if run_root in self._cache:
+            return self._cache[run_root]
+
+        rois = load_roi_set(run_root, self.roi_filename)
+        if rois:
+            self._cache[run_root] = rois
+            return rois
+
+        representative_frame = self._locate_representative_frame(record)
+        logger.info("Autodetecting ROI using %s", representative_frame)
+
+        detected_roi, chart_bbox = autodetect_black_hole_roi(
+            representative_frame,
+            width=record.run.config.raw_width,
+            height=record.run.config.raw_height,
+            stride=record.run.config.raw_stride,
+            roi_size=self.roi_size,
+        )
+        rois = [detected_roi]
+        save_roi_set(run_root, rois, self.roi_filename)
+        generate_autodetect_verification_image(
+            run_root / self.preview_filename,
+            representative_frame,
+            width=record.run.config.raw_width,
+            height=record.run.config.raw_height,
+            stride=record.run.config.raw_stride,
+            chart_bbox=chart_bbox,
+            roi=detected_roi,
+        )
+
+        self._cache[run_root] = rois
+        return rois
+
+    def _locate_representative_frame(self, record: "CaptureRecord") -> Path:
+        """Find a RAW16 file that can be used for ROI selection."""
+        candidates: list[Path] = []
+        for path in record.converted_files:
+            if path.suffix.lower() in {".raw", ".raw16"}:
+                candidates.append(path)
+        if not candidates and record.raw16_dir.exists():
+            candidates.extend(sorted(record.raw16_dir.glob("*.raw")))
+        if not candidates:
+            raise FileNotFoundError(
+                "No RAW16 frames available for ROI selection in " f"{record.capture_dir}"
+            )
+        return candidates[0]
 
 
 def run_analysis(run_root: Path, config: AnalysisConfig) -> None:
