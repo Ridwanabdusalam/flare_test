@@ -22,6 +22,13 @@ class ROI:
     size: tuple[int, int]
 
     def __post_init__(self) -> None:
+        # Normalise coordinates to plain Python ints so they remain JSON serialisable
+        # even when constructed from NumPy indices.
+        center = (int(self.center[0]), int(self.center[1]))
+        size = (int(self.size[0]), int(self.size[1]))
+        object.__setattr__(self, "center", center)
+        object.__setattr__(self, "size", size)
+
         if self.size[0] <= 0 or self.size[1] <= 0:
             raise ValueError("ROI dimensions must be positive")
 
