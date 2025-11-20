@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -107,38 +108,230 @@ def save_roi_set(run_root: Path, rois: Iterable[ROI], filename: str = "rois.json
     return path
 
 
-def load_raw16_image(path: Path, *, width: int, height: int, stride: int | None = None) -> np.ndarray:
-    """Load a RAW16 frame into a 2D NumPy array using capture metadata."""
+def _guess_dimensions_from_pixel_count(pixel_count: int) -> tuple[int, int]:
+    """Return a best-effort width/height guess given a pixel count."""
+
+    if pixel_count <= 0:
+        raise ValueError("RAW16 files must contain at least one pixel")
+
+    common_widths = (
+        8192,
+        6144,
+        5632,
+        5472,
+        5120,
+        5000,
+        4896,
+        4640,
+        4500,
+        4320,
+        4200,
+        4096,
+        4056,
+        4032,
+        4000,
+        3984,
+        3840,
+        3712,
+        3680,
+        3648,
+        3328,
+        3264,
+        3200,
+        3072,
+        3000,
+        2944,
+        2880,
+        2816,
+        2688,
+        2592,
+        2560,
+        2496,
+        2448,
+        2304,
+        2208,
+        2048,
+        2000,
+        1920,
+        1856,
+        1792,
+        1728,
+        1680,
+        1600,
+        1536,
+        1500,
+        1472,
+        1400,
+        1344,
+        1280,
+        1216,
+        1152,
+        1080,
+        1024,
+        960,
+        896,
+        832,
+        800,
+        768,
+        720,
+        704,
+        640,
+        608,
+        576,
+        560,
+        544,
+        512,
+        480,
+        448,
+        416,
+        400,
+        384,
+        352,
+        320,
+        288,
+        256,
+        224,
+        192,
+        160,
+        128,
+        96,
+        64,
+    )
+
+    candidates: list[tuple[int, int]] = []
+    for width in common_widths:
+        if width <= 0:
+            continue
+        if pixel_count % width:
+            continue
+        height = pixel_count // width
+        if height <= 0:
+            continue
+        candidates.append((width, height))
+
+    if not candidates:
+        root = int(math.sqrt(pixel_count))
+        search_limit = max(1, min(root + 1024, pixel_count))
+        best: tuple[int, int] | None = None
+        best_gap = pixel_count
+        for width in range(max(1, root - 2048), search_limit):
+            if pixel_count % width:
+                continue
+            height = pixel_count // width
+            gap = abs(width - height)
+            if gap < best_gap:
+                best_gap = gap
+                best = (width, height)
+                if gap == 0:
+                    break
+        if best is None:
+            return pixel_count, 1
+        candidates.append(best)
+
+    def score(dimensions: tuple[int, int]) -> tuple[float, int]:
+        width, height = dimensions
+        ratio = width / height
+        targets = (4 / 3, 16 / 9, 3 / 2, 1.0)
+        distance = min(abs(ratio - target) for target in targets)
+        return (distance, -width)
+
+    width, height = min(candidates, key=score)
+    if width < height:
+        width, height = height, width
+    logger.warning(
+        "Guessed RAW16 geometry as %dx%d based on %d pixels; pass --width/--height if incorrect",
+        width,
+        height,
+        pixel_count,
+    )
+    return width, height
+
+
+def load_raw16_image(
+    path: Path,
+    *,
+    width: int | None,
+    height: int | None,
+    stride: int | None = None,
+) -> np.ndarray:
+    """Load a RAW16 frame into a 2D NumPy array, inferring geometry when possible."""
 
     if not path.exists():
         raise FileNotFoundError(path)
 
+    data = np.fromfile(path, dtype=np.uint16)
+    pixel_count = data.size
+
+    if width is None and height is None:
+        width, height = _guess_dimensions_from_pixel_count(pixel_count)
+    elif width is None:
+        if height <= 0:
+            raise ValueError("Height must be positive when width is omitted")
+        width = pixel_count // height
+        logger.warning(
+            "Width not provided; inferred width=%d using height=%d and %d total pixels",
+            width,
+            height,
+            pixel_count,
+        )
+    elif height is None:
+        stride = stride or width
+        height = max(1, pixel_count // stride)
+        logger.warning(
+            "Height not provided; inferred height=%d using width=%d, stride=%d and %d total pixels",
+            height,
+            width,
+            stride,
+            pixel_count,
+        )
+
+    if width <= 0 or height <= 0:
+        raise ValueError("Width and height must be positive")
+
     stride = stride or width
     expected_pixels = stride * height
-    data = np.fromfile(path, dtype=np.uint16)
 
-    if data.size < expected_pixels:
-        # Some capture setups produce tightly packed RAW16 frames without stride
-        # padding. If the file is still large enough for width * height pixels,
-        # treat it as a tightly packed frame and continue instead of failing.
+    if expected_pixels > pixel_count:
         packed_pixels = width * height
-        if data.size >= packed_pixels:
+        if packed_pixels <= pixel_count:
             logger.warning(
-                "RAW16 file %s has %d pixels (< expected %d); assuming no stride padding",
+                "RAW16 file %s has %d pixels (< expected %d); assuming tight packing (stride=%d)",
                 path,
-                data.size,
+                pixel_count,
                 expected_pixels,
+                width,
             )
             stride = width
             expected_pixels = packed_pixels
         else:
-            raise ValueError(
-                f"RAW16 file {path} is too small for expected dimensions {width}x{height}"
+            available_rows = pixel_count // stride
+            logger.warning(
+                "RAW16 file %s is smaller than %dx%d with stride %d; trimming height to %d rows to fit %d pixels",
+                path,
+                width,
+                height,
+                stride,
+                available_rows,
+                pixel_count,
             )
+            height = max(1, available_rows)
+            expected_pixels = stride * height
 
-    image = data[:expected_pixels].reshape(height, stride)
+    usable_pixels = min(expected_pixels, pixel_count)
+    if usable_pixels <= 0:
+        raise ValueError(f"RAW16 file {path} contains no pixel data")
+
+    image = data[:usable_pixels].reshape(height, stride)
     if stride != width:
         image = image[:, :width]
+    stride_pixels = image.strides[0] // image.itemsize
+    logger.info(
+        "Loaded RAW16 %s as %dx%d (stride=%d)",
+        path,
+        image.shape[1],
+        image.shape[0],
+        stride_pixels,
+    )
     return image
 
 

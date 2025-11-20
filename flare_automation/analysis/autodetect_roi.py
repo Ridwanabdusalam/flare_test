@@ -20,8 +20,8 @@ class ChartNotFoundError(RuntimeError):
 def autodetect_black_hole_roi(
     image_path: Path,
     *,
-    width: int,
-    height: int,
+    width: int | None,
+    height: int | None,
     stride: int | None = None,
     roi_size: tuple[int, int] = (16, 16),
 ) -> tuple[ROI, tuple[int, int, int, int]]:
@@ -52,8 +52,18 @@ def autodetect_black_hole_roi(
     scale = 255.0 / (high - low + 1e-6)
     norm_image = np.clip((image - low) * scale, 0, 255).astype(np.uint8)
 
+    logger.debug(
+        "Percentile scaling for %s -> low=%.2f, high=%.2f (scale=%.6f)",
+        image_path,
+        low,
+        high,
+        scale,
+    )
+
     # 3. Apply Otsu's threshold to find the chart (assumes bimodal distribution)
     thresh = threshold_otsu(norm_image)
+
+    logger.debug("Global Otsu threshold: %.2f", thresh)
 
     # First, find the bright illuminated area
     binary_bright = (norm_image > thresh).astype(np.uint8) * 255
@@ -65,12 +75,18 @@ def autodetect_black_hole_roi(
     largest_bright_contour = max(contours_bright, key=cv2.contourArea)
     ill_x, ill_y, ill_w, ill_h = cv2.boundingRect(largest_bright_contour)
 
+    logger.debug(
+        "Illuminated (white) area bbox: x=%d y=%d w=%d h=%d", ill_x, ill_y, ill_w, ill_h
+    )
+
     # Now, find the dark chart area within the illuminated area
     illuminated_region_norm = norm_image[ill_y : ill_y + ill_h, ill_x : ill_x + ill_w]
 
     # We need a new threshold for this sub-region
     thresh_chart = threshold_otsu(illuminated_region_norm)
     binary_dark = (illuminated_region_norm < thresh_chart).astype(np.uint8) * 255
+
+    logger.debug("Chart (dark) Otsu threshold inside illuminated area: %.2f", thresh_chart)
 
 
     # 4. Find contours of the dark regions
@@ -88,6 +104,10 @@ def autodetect_black_hole_roi(
     chart_y = ill_y + chart_y_rel
     chart_bbox = (chart_x, chart_y, chart_w, chart_h)
 
+    logger.debug(
+        "Chart (black) area bbox: x=%d y=%d w=%d h=%d", chart_x, chart_y, chart_w, chart_h
+    )
+
 
     # 6. Find the darkest point within the chart's bounding box in the *original* image
     chart_region = image[chart_y : chart_y + chart_h, chart_x : chart_x + chart_w]
@@ -98,6 +118,13 @@ def autodetect_black_hole_roi(
     # The center is relative to the top-left of the chart region, so add the offset
     center_y = chart_y + min_val_loc[0]
     center_x = chart_x + min_val_loc[1]
+
+    logger.debug(
+        "Darkest point within chart region: x=%d y=%d (relative min value %.0f)",
+        center_x,
+        center_y,
+        float(chart_region[min_val_loc]),
+    )
 
     # 7. Create and return the ROI
     roi = ROI(name="black_hole", center=(center_x, center_y), size=roi_size)
@@ -119,8 +146,8 @@ def generate_autodetect_verification_image(
     output_path: Path,
     image_path: Path,
     *,
-    width: int,
-    height: int,
+    width: int | None,
+    height: int | None,
     stride: int | None = None,
     chart_bbox: tuple[int, int, int, int],
     roi: ROI,
