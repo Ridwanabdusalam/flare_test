@@ -211,10 +211,12 @@ class AutomatedROISelector:
         roi_size: tuple[int, int] = (16, 16),
         roi_filename: str = "rois.json",
         preview_filename: str = "autodetect_roi_preview.png",
+        preferred_illumination_name: str = "led_on_backlights_off",
     ) -> None:
         self.roi_size = roi_size
         self.roi_filename = roi_filename
         self.preview_filename = preview_filename
+        self.preferred_illumination_name = preferred_illumination_name
         self._cache: dict[Path, list[ROI]] = {}
 
     def __call__(self, record: "CaptureRecord") -> list[ROI]:
@@ -227,8 +229,13 @@ class AutomatedROISelector:
             self._cache[run_root] = rois
             return rois
 
-        representative_frame = self._locate_representative_frame(record)
-        logger.info("Autodetecting ROI using %s", representative_frame)
+        source_record = self._locate_roi_source_record(run_root)
+        representative_frame = self._locate_representative_frame(source_record)
+        logger.info(
+            "Autodetecting ROI using %s (illumination=%s)",
+            representative_frame,
+            source_record.illumination.name,
+        )
 
         detected_roi, chart_bbox = autodetect_black_hole_roi(
             representative_frame,
@@ -251,6 +258,31 @@ class AutomatedROISelector:
 
         self._cache[run_root] = rois
         return rois
+
+    def _locate_roi_source_record(self, run_root: Path) -> "CaptureRecord":
+        """Select the capture record used for ROI detection.
+
+        Prefers captures taken with the configured illumination name so that ROI
+        detection always runs against the same lighting condition. Falls back to
+        the first available capture when the preferred profile was not recorded.
+        """
+
+        preferred_record: CaptureRecord | None = None
+        first_record: CaptureRecord | None = None
+
+        for candidate in iter_capture_records(run_root):
+            if first_record is None:
+                first_record = candidate
+            if candidate.illumination.name == self.preferred_illumination_name:
+                preferred_record = candidate
+                break
+
+        if preferred_record is not None:
+            return preferred_record
+        if first_record is not None:
+            return first_record
+
+        raise FileNotFoundError(f"No captures found in {run_root}")
 
     def _locate_representative_frame(self, record: "CaptureRecord") -> Path:
         """Find a RAW16 file that can be used for ROI selection."""
