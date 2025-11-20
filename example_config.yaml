@@ -5,13 +5,25 @@ serial_terminator: "\r"
 preferred_com_port: COM4
 # adb_serial: ABCDEF123456  # Optional: auto-detects when omitted
 illumination:
-  - name: led_ring
-    serial_command: "p 0 020"
-    pwm_percent: 20
-    settle_time_s: 1.0
-  - name: object_ring
-    serial_command: "p 1 050"
+  # LED off, backlight on
+  - name: backlights_on_led_off
+    serial_command: "p 0 000;p 1 050"
     pwm_percent: 50
+    settle_time_s: 1.0
+  # Backlight off, LED on (preferred for ROI analysis)
+  - name: led_on_backlights_off
+    serial_command: "p 0 050;p 1 000"
+    pwm_percent: 50
+    settle_time_s: 1.0
+  # Both illumination sources on
+  - name: led_on_backlights_on
+    serial_command: "p 0 050;p 1 050"
+    pwm_percent: 50
+    settle_time_s: 1.0
+  # Both illumination sources off
+  - name: backlights_off_led_off
+    serial_command: "p 0 000;p 1 000"
+    pwm_percent: 0
     settle_time_s: 1.0
 exposure_sequences:
   - label: visible
