@@ -26,16 +26,8 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Path to the RAW16 frame to analyse.",
     )
-    parser.add_argument(
-        "--width",
-        type=int,
-        help="Image width in pixels. Omit to let the script guess from file size.",
-    )
-    parser.add_argument(
-        "--height",
-        type=int,
-        help="Image height in pixels. Omit to let the script guess from file size.",
-    )
+    parser.add_argument("--width", required=True, type=int, help="Image width in pixels.")
+    parser.add_argument("--height", required=True, type=int, help="Image height in pixels.")
     parser.add_argument(
         "--stride",
         type=int,

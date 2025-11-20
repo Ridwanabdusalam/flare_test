@@ -304,15 +304,23 @@ def load_raw16_image(
             stride = width
             expected_pixels = packed_pixels
         else:
-            available_rows = pixel_count // stride
-            logger.warning(
-                "RAW16 file %s is smaller than %dx%d with stride %d; trimming height to %d rows to fit %d pixels",
-                path,
-                width,
-                height,
-                stride,
-                available_rows,
-                pixel_count,
+            available_rows_with_stride = data.size // stride
+            available_rows_tightly_packed = data.size // width
+            raise ValueError(
+                "RAW16 file %s is too small for expected dimensions %dx%d; "
+                "file has %d pixels (%d bytes) which is enough for %d rows with stride %d "
+                "or %d rows if tightly packed. Double-check width/height/stride from the "
+                "capture metadata."
+                % (
+                    path,
+                    width,
+                    height,
+                    data.size,
+                    data.size * data.itemsize,
+                    available_rows_with_stride,
+                    stride,
+                    available_rows_tightly_packed,
+                )
             )
             height = max(1, available_rows)
             expected_pixels = stride * height
