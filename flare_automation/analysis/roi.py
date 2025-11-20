@@ -132,8 +132,23 @@ def load_raw16_image(path: Path, *, width: int, height: int, stride: int | None 
             stride = width
             expected_pixels = packed_pixels
         else:
+            available_rows_with_stride = data.size // stride
+            available_rows_tightly_packed = data.size // width
             raise ValueError(
-                f"RAW16 file {path} is too small for expected dimensions {width}x{height}"
+                "RAW16 file %s is too small for expected dimensions %dx%d; "
+                "file has %d pixels (%d bytes) which is enough for %d rows with stride %d "
+                "or %d rows if tightly packed. Double-check width/height/stride from the "
+                "capture metadata."
+                % (
+                    path,
+                    width,
+                    height,
+                    data.size,
+                    data.size * data.itemsize,
+                    available_rows_with_stride,
+                    stride,
+                    available_rows_tightly_packed,
+                )
             )
 
     image = data[:expected_pixels].reshape(height, stride)
