@@ -22,6 +22,16 @@ class SerialDevice:
 class SerialController:
     """Utility class for LED/illumination serial communications."""
 
+    # Common USB VID/PID pairs for Arduino Mega 2560 boards, including
+    # official (2341/2A03) and CH340-based clones (1A86:7523).
+    MEGA_2560_IDS = {
+        (0x2341, 0x0042),
+        (0x2341, 0x0010),
+        (0x2A03, 0x0042),
+        (0x2A03, 0x0010),
+        (0x1A86, 0x7523),
+    }
+
     def __init__(self, *, baudrate: int, terminator: str = "\r") -> None:
         self._baudrate = baudrate
         self._terminator = terminator
@@ -45,6 +55,19 @@ class SerialController:
                 if port.pid is None or f"{port.pid:04x}" != f"{int(product_id, 16):04x}":
                     continue
             yield SerialDevice(port=port.device, description=port.description)
+
+    @classmethod
+    def discover_mega_2560(cls) -> Iterable[SerialDevice]:
+        """Yield Arduino Mega 2560 devices detected on the system."""
+
+        if list_ports is None:
+            raise RuntimeError("pyserial is required for serial discovery")
+
+        for port in list_ports.comports():
+            if port.vid is None or port.pid is None:
+                continue
+            if (port.vid, port.pid) in cls.MEGA_2560_IDS:
+                yield SerialDevice(port=port.device, description=port.description)
 
     def open(self, port: str):  # pragma: no cover - hardware interaction
         connection = serial.Serial(port, baudrate=self._baudrate, timeout=2)
