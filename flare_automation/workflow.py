@@ -53,13 +53,22 @@ class FlareCaptureWorkflow:
         if self.config.preferred_com_port:
             return self.config.preferred_com_port
 
-        devices = list(
-            SerialController.discover(
-                vendor_id=self.config.serial_vendor_id, product_id=self.config.serial_product_id
+        vendor_id = self.config.serial_vendor_id
+        product_id = self.config.serial_product_id
+        if vendor_id or product_id:
+            devices = list(
+                SerialController.discover(vendor_id=vendor_id, product_id=product_id)
             )
-        )
+        else:
+            # Auto-detect a connected Arduino Mega 2560 board by known USB IDs,
+            # falling back to unfiltered discovery when nothing matches.
+            devices = list(SerialController.discover_mega_2560())
+            if not devices:
+                devices = list(SerialController.discover())
         if not devices:
-            raise RuntimeError("No serial devices matched the provided vendor/product filters")
+            raise RuntimeError(
+                "No serial devices matched the provided vendor/product filters or known Mega 2560 IDs"
+            )
         if len(devices) > 1:
             raise RuntimeError(
                 "Multiple serial devices discovered. Specify 'preferred_com_port' to disambiguate."
