@@ -2,7 +2,7 @@ output_root: ./camera_runs
 scene_name: sample_scene
 serial_baud: 19200
 serial_terminator: "\r"
-preferred_com_port: COM4
+preferred_com_port: COM5
 # adb_serial: ABCDEF123456  # Optional: auto-detects when omitted
 illumination:
   # LED off, backlight on
