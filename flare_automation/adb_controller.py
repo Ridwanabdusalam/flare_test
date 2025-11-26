@@ -11,6 +11,7 @@ from .utils import run_command
 @dataclass
 class AdbDevice:
     serial: str
+    state: str | None = None
     description: str | None = None
 
 
@@ -78,9 +79,8 @@ class AdbController:
         output = run_command(["adb", "devices", "-l"])
         lines = [line.strip() for line in output.splitlines()[1:] if line.strip()]
         for line in lines:
-            if "device" not in line:
-                continue
             parts = line.split()
             serial = parts[0]
+            state = parts[1] if len(parts) > 1 else None
             desc = " ".join(parts[2:]) if len(parts) > 2 else None
-            yield AdbDevice(serial=serial, description=desc)
+            yield AdbDevice(serial=serial, state=state, description=desc)

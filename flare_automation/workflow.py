@@ -40,12 +40,23 @@ class FlareCaptureWorkflow:
             return
 
         devices = list(AdbController.list_devices())
+        ready_devices = [device for device in devices if device.state == "device" or device.state is None]
+
         if not devices:
             raise RuntimeError("No ADB devices detected. Connect a device or set 'adb_serial'.")
-        if len(devices) > 1:
+
+        if not ready_devices:
+            states = ", ".join(f"{device.serial} ({device.state})" for device in devices)
+            raise RuntimeError(
+                "ADB devices found but none are authorized or online. "
+                "Authorize the device and confirm it appears as 'device' in 'adb devices -l'. "
+                f"Current states: {states}"
+            )
+
+        if len(ready_devices) > 1:
             raise RuntimeError("Multiple ADB devices detected. Specify 'adb_serial' to disambiguate.")
 
-        selected = devices[0].serial
+        selected = ready_devices[0].serial
         self.adb_controller.set_serial(selected)
         self.config.adb_serial = selected
 

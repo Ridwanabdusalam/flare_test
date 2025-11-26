@@ -111,7 +111,7 @@ relative to the configuration file unless absolute paths are supplied.
 
 | Field | Required | Description |
 | ----- | -------- | ----------- |
-| `adb_serial` | Optional | Serial number reported by `adb devices -l`. Required when multiple phones/tablets are attached. |
+| `adb_serial` | Optional | Serial number reported by `adb devices -l`. Required when multiple phones/tablets are attached. Devices must show the `device` state (authorize the prompt on the handset if it appears as `unauthorized`). |
 | `adb_timeout_s` | No (default `10.0`) | Timeout (seconds) applied to individual ADB commands. |
 
 ### Illumination Profiles
