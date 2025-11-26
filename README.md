@@ -105,13 +105,13 @@ relative to the configuration file unless absolute paths are supplied.
 | `serial_baud` | No (default `19200`) | Baud rate for the illumination controller. |
 | `serial_terminator` | No (default carriage return) | Character appended to each command. |
 | `preferred_com_port` | Recommended | Explicit COM port name (e.g. `COM11`). Avoids ambiguity when multiple devices are attached. |
-| `serial_vendor_id`, `serial_product_id` | Optional | USB VID/PID filters (hex strings such as `0403`). Used when auto-discovering the serial device. |
+| `serial_vendor_id`, `serial_product_id` | Optional | USB VID/PID filters (hex strings such as `0403`). Used when auto-discovering the serial device. If omitted, the workflow will first look for an attached Arduino Mega 2560 using known VID/PID pairs (including CH340-based clones). |
 
 ### Android Device Control
 
 | Field | Required | Description |
 | ----- | -------- | ----------- |
-| `adb_serial` | Optional | Serial number reported by `adb devices -l`. Required when multiple phones/tablets are attached. |
+| `adb_serial` | Optional | Serial number reported by `adb devices -l`. Required when multiple phones/tablets are attached. Devices must show the `device` state (authorize the prompt on the handset if it appears as `unauthorized`). |
 | `adb_timeout_s` | No (default `10.0`) | Timeout (seconds) applied to individual ADB commands. |
 
 ### Illumination Profiles
