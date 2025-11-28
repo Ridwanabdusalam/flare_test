@@ -20,8 +20,8 @@ class ChartNotFoundError(RuntimeError):
 def autodetect_black_hole_roi(
     image_path: Path,
     *,
-    width: int,
-    height: int,
+    width: int | None,
+    height: int | None,
     stride: int | None = None,
     roi_size: tuple[int, int] = (16, 16),
 ) -> tuple[ROI, tuple[int, int, int, int]]:
@@ -146,8 +146,8 @@ def generate_autodetect_verification_image(
     output_path: Path,
     image_path: Path,
     *,
-    width: int,
-    height: int,
+    width: int | None,
+    height: int | None,
     stride: int | None = None,
     chart_bbox: tuple[int, int, int, int],
     roi: ROI,
